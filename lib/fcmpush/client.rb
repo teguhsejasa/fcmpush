@@ -61,8 +61,24 @@ module Fcmpush
       raise NetworkError, "A network error occurred: #{e.class} (#{e.message})"
     end
 
+    def subscribe_v1(topic, *instance_ids, query: {}, headers: {})
+      uri, request = make_subscription_request(topic, *instance_ids, :subscribe, query, headers, 'v1')
+      response = exception_handler(connection.request(uri, request))
+      JsonResponse.new(response)
+    rescue Timeout::Error, Errno::EINVAL, Errno::ECONNRESET, EOFError, Net::HTTPBadResponse, Net::HTTPHeaderSyntaxError, Net::ProtocolError => e
+      raise NetworkError, "A network error occurred: #{e.class} (#{e.message})"
+    end
+
     def unsubscribe(topic, *instance_ids, query: {}, headers: {})
       uri, request = make_subscription_request(topic, *instance_ids, :unsubscribe, query, headers)
+      response = exception_handler(connection.request(uri, request))
+      JsonResponse.new(response)
+    rescue Timeout::Error, Errno::EINVAL, Errno::ECONNRESET, EOFError, Net::HTTPBadResponse, Net::HTTPHeaderSyntaxError, Net::ProtocolError => e
+      raise NetworkError, "A network error occurred: #{e.class} (#{e.message})"
+    end
+
+    def unsubscribe_v1(topic, *instance_ids, query: {}, headers: {})
+      uri, request = make_subscription_request(topic, *instance_ids, :unsubscribe, query, headers, 'v1')
       response = exception_handler(connection.request(uri, request))
       JsonResponse.new(response)
     rescue Timeout::Error, Errno::EINVAL, Errno::ECONNRESET, EOFError, Net::HTTPBadResponse, Net::HTTPHeaderSyntaxError, Net::ProtocolError => e
@@ -73,6 +89,14 @@ module Fcmpush
       uri, request = make_batch_request(messages, query, headers)
       response = exception_handler(connection.request(uri, request))
       BatchResponse.new(response)
+    rescue Timeout::Error, Errno::EINVAL, Errno::ECONNRESET, EOFError, Net::HTTPBadResponse, Net::HTTPHeaderSyntaxError, Net::ProtocolError => e
+      raise NetworkError, "A network error occurred: #{e.class} (#{e.message})"
+    end
+
+    def get_info(instance_id, headers: {})
+      uri, request = make_info_request(instance_id, headers)
+      response = exception_handler(connection.request(uri, request))
+      JsonResponse.new(response)
     rescue Timeout::Error, Errno::EINVAL, Errno::ECONNRESET, EOFError, Net::HTTPBadResponse, Net::HTTPHeaderSyntaxError, Net::ProtocolError => e
       raise NetworkError, "A network error occurred: #{e.class} (#{e.message})"
     end
@@ -91,13 +115,13 @@ module Fcmpush
         [uri, post]
       end
 
-      def make_subscription_request(topic, instance_ids, type, query, headers)
+      def make_subscription_request(topic, instance_ids, type, query, headers, api_version=nil)
         suffix = type == :subscribe ? ':batchAdd' : ':batchRemove'
 
         uri = URI.join(TOPIC_DOMAIN, TOPIC_ENDPOINT_PREFIX + suffix)
         uri.query = URI.encode_www_form(query) unless query.empty?
 
-        headers = legacy_authorized_header(headers)
+        headers = api_version.eql?('v1') ? v1_authorized_header(headers) : legacy_authorized_header(headers)
         post = Net::HTTP::Post.new(uri, headers)
         post.body = make_subscription_body(topic, *instance_ids)
 
@@ -115,6 +139,7 @@ module Fcmpush
       def v1_authorized_header(headers)
         headers.merge('Content-Type' => 'application/json',
                       'Accept' => 'application/json',
+                      'access_token_auth' => 'true',
                       'Authorization' => "Bearer #{access_token}")
       end
 
@@ -150,6 +175,14 @@ module Fcmpush
         post.body = make_batch_payload(messages, headers)
 
         [uri, post]
+      end
+
+      def make_info_request(instance_id, headers)
+        headers = v1_authorized_header(headers)
+        uri = URI.join(TOPIC_DOMAIN, "/iid/info/#{instance_id}")
+        get = Net::HTTP::Get.new(uri, headers)
+
+        [uri, get]
       end
   end
 end
