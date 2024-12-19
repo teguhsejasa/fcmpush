@@ -85,6 +85,21 @@ module Fcmpush
       raise NetworkError, "A network error occurred: #{e.class} (#{e.message})"
     end
 
+    def create_group_v1(args: {}, query: {}, headers: {})
+      args = args.with_indifferent_access
+      manage_device_group(args.merge('operation' => 'create'), query, headers)
+    end
+
+    def add_group_v1(args: {}, query: {}, headers: {})
+      args = args.with_indifferent_access
+      manage_device_group(args.merge('operation' => 'add'), query, headers)
+    end
+
+    def remove_group_v1(args: {}, query: {}, headers: {})
+      args = args.with_indifferent_access
+      manage_device_group(args.merge('operation' => 'remove'), query, headers)
+    end
+
     def batch_push(messages, query: {}, headers: {})
       uri, request = make_batch_request(messages, query, headers)
       response = exception_handler(connection.request(uri, request))
@@ -183,6 +198,39 @@ module Fcmpush
         get = Net::HTTP::Get.new(uri, headers)
 
         [uri, get]
+      end
+
+      def make_subscription_group_request(args, query, headers)
+        uri = 'https://fcm.googleapis.com/fcm/notification'
+        uri.query = URI.encode_www_form(query) unless query.empty?
+      
+        headers = v1_authorized_header(headers)
+        post = Net::HTTP::Post.new(uri, headers)
+        post.body = make_subscription_group_body(args)
+      
+        [uri, post]
+      end
+      
+      def make_subscription_group_body(options)
+        params = {
+          operation: options['operation'], #[create, add, remove]
+          notification_key_name: options['notification_key_name'],
+          registration_ids: options['registration_ids'] # devices user
+        }
+      
+        if ['add', 'remove'].include?(options['operation'])
+          params = params.merge('notification_key' => options['notification_key'])
+        end
+      
+        params.to_json
+      end
+      
+      def manage_device_group(args, query, headers)
+        uri, request = make_subscription_group_request(args, query, headers)
+        response = exception_handler(connection.request(uri, request))
+        JsonResponse.new(response)
+      rescue Timeout::Error, Errno::EINVAL, Errno::ECONNRESET, EOFError, Net::HTTPBadResponse, Net::HTTPHeaderSyntaxError, Net::ProtocolError => e
+        raise NetworkError, "A network error occurred: #{e.class} (#{e.message})"
       end
   end
 end

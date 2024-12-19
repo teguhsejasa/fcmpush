@@ -12,5 +12,5 @@
 
 /vendor/bundle
 .ruby-version
-Gemfile.lock
+# Gemfile.lock
 /**/*test_credentials.json
