@@ -34,6 +34,7 @@ module Fcmpush
                        else
                          File.open(configuration.json_key_io)
                        end
+                  io.rewind #Positions strio to the beginning of input, resetting lineno to zero.
                   Google::Auth::ServiceAccountCredentials.make_creds(
                     json_key_io: io,
                     scope: configuration.scope
